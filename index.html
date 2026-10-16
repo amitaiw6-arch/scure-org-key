@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="sCure Org Key">
+  <title>sCure Org Key</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <img class="logo" src="icons/icon.svg" alt="" width="44" height="44">
+      <div>
+        <h1>sCure Org Key</h1>
+        <p class="sub">Put your organization on a USB drive for the sCure Box</p>
+      </div>
+    </header>
+
+    <section class="card" aria-labelledby="s1">
+      <h2 id="s1"><span class="n">1</span> Organization ID</h2>
+      <label for="orgId" class="hint">Paste or type the ID. Pasting a whole message works too - the ID is picked out of it.</label>
+      <input id="orgId" type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             placeholder="3f2504e0-4f89-11d3-9a0c-0305e82c3301" aria-describedby="idStatus">
+      <div class="row">
+        <button id="pasteBtn" class="ghost" type="button">Paste</button>
+        <label class="file ghost" for="openFile">From a file</label>
+        <input id="openFile" type="file" accept=".csv,.txt,.json,text/*" hidden>
+      </div>
+      <p id="idStatus" class="status" role="status" aria-live="polite"></p>
+
+      <label for="orgName" class="hint">Organization name <span class="opt">(optional)</span></label>
+      <input id="orgName" type="text" autocomplete="organization" placeholder="Acme Dental Lab" maxlength="80">
+    </section>
+
+    <section class="card" aria-labelledby="s2">
+      <h2 id="s2"><span class="n">2</span> Save to the USB drive</h2>
+      <p class="hint">Plug the USB drive into your phone, then tap Save and choose the drive.</p>
+      <div class="file-line">
+        <span class="file-ico" aria-hidden="true">CSV</span>
+        <span id="fileName" class="mono">scure-organization.csv</span>
+      </div>
+      <button id="saveBtn" class="primary" type="button" disabled>Save to USB drive</button>
+      <p id="saveStatus" class="status" role="status" aria-live="polite"></p>
+      <details id="saveHelp">
+        <summary>The file went to Downloads, not the drive?</summary>
+        <ol>
+          <li>Open the <b>Files</b> app and find <span class="mono">scure-organization.csv</span> (Downloads).</li>
+          <li>Long-press it, choose <b>Move</b> (or Copy), then pick the USB drive.</li>
+          <li>On Android Chrome you can also turn on <i>Settings &rarr; Downloads &rarr; Ask where to save files</i>.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="card" aria-labelledby="s3">
+      <h2 id="s3"><span class="n">3</span> On the sCure Box</h2>
+      <ol class="steps">
+        <li>Plug the USB drive into the sCure Box.</li>
+        <li>Open <b>Settings</b> and find <b>Organization</b>.</li>
+        <li>Tap <b>Link Organization</b>, then choose the CSV file from the drive.</li>
+      </ol>
+    </section>
+
+    <section class="card slim" id="recentCard" hidden aria-labelledby="s4">
+      <h2 id="s4">Recent</h2>
+      <ul id="recent" class="recent"></ul>
+    </section>
+
+    <footer class="foot">
+      <button id="installBtn" class="ghost" type="button" hidden>Install this app</button>
+      <p id="iosHint" class="hint" hidden>To install: tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>
+      <p class="tiny">Nothing leaves your phone. The ID is only written to the file you save.</p>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

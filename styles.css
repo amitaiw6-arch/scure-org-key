@@ -1,0 +1,129 @@
+:root {
+  --bg: #0a0a0c;
+  --card: #131316;
+  --card-line: #24242a;
+  --text: #f4f4f6;
+  --muted: #9a9aa6;
+  --primary: #0b6fa8;
+  --primary-hi: #38b6f1;
+  --ok: #3fbf7f;
+  --bad: #ef5b5b;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display: grid;
+  gap: 16px;
+}
+
+.top { display: flex; align-items: center; gap: 14px; padding: 4px 2px 8px; }
+.top h1 { margin: 0; font-size: 24px; letter-spacing: .2px; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.logo { border-radius: 11px; flex: none; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  border-radius: var(--radius);
+  padding: 18px 16px 20px;
+  display: grid;
+  gap: 12px;
+}
+.card.slim { padding-bottom: 12px; }
+.card h2 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+.n {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
+}
+
+.hint { margin: 0; color: var(--muted); font-size: 14px; }
+.opt { opacity: .7; }
+.tiny { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+input[type="text"] {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--card-line);
+  background: #0e0e11;
+  color: var(--text);
+  font: 14px ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* the whole 36-character ID fits a phone */
+  outline: none;
+}
+input[type="text"]:focus-visible { border-color: var(--primary-hi); }
+input#orgName { font-family: inherit; font-size: 16px; }
+input.valid { border-color: var(--ok); }
+input.invalid { border-color: var(--bad); }
+
+button, .file {
+  font: 600 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 50px;
+  border-radius: 12px;
+  padding: 0 18px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  color: var(--text);
+}
+button:focus-visible, .file:focus-within, summary:focus-visible { outline: 2px solid var(--primary-hi); outline-offset: 2px; }
+
+.primary { background: var(--primary); width: 100%; font-size: 17px; }
+.primary:disabled { background: #1c3a4c; color: #6f8da0; cursor: not-allowed; }
+.primary:not(:disabled):active { filter: brightness(1.15); }
+
+.ghost { background: transparent; border-color: var(--card-line); }
+.ghost:active { background: #1b1b20; }
+.file { display: inline-flex; align-items: center; justify-content: center; }
+
+.row { display: flex; gap: 8px; }
+.row > button, .row > .file { flex: 1; }
+
+.status { margin: 0; min-height: 20px; font-size: 14px; }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+
+.file-line {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  background: #0e0e11; border: 1px solid var(--card-line); border-radius: 12px; overflow-wrap: anywhere;
+}
+.file-ico {
+  flex: none; font: 700 12px system-ui, sans-serif; letter-spacing: .5px;
+  background: #1c3a4c; color: var(--primary-hi); border-radius: 8px; padding: 6px 8px;
+}
+
+details { color: var(--muted); font-size: 14px; }
+summary { cursor: pointer; padding: 6px 0; }
+details ol, .steps { margin: 6px 0 0; padding-left: 22px; }
+.steps { color: var(--text); font-size: 15px; display: grid; gap: 4px; }
+
+.recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.recent button {
+  width: 100%; min-height: 54px; text-align: left; display: grid; gap: 2px; padding: 8px 14px;
+  background: #0e0e11; border-color: var(--card-line); font-weight: 500;
+}
+.recent .nm { font-size: 15px; }
+.recent .id { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
+
+.foot { display: grid; gap: 10px; justify-items: center; padding-top: 4px; }
+
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: no-preference) {
+  button, input { transition: border-color .15s, background-color .15s, filter .15s; }
+}
