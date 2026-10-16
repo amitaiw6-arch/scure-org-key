@@ -25,6 +25,30 @@
       </div>
     </header>
 
+    <section class="card" aria-labelledby="s0">
+      <h2 id="s0">Sign in to Origin</h2>
+      <p class="hint">Sign in with your Origin email to get the organization. Signing in with Google or Microsoft? Type the ID below instead.</p>
+      <div id="signedOut" class="stack">
+        <input id="oEmail" type="text" inputmode="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="Origin email" aria-label="Origin email" class="plain">
+        <div class="pw">
+          <input id="oPass" type="password" autocomplete="current-password" placeholder="Password" aria-label="Origin password" class="plain">
+          <button id="oShow" class="ghost" type="button" aria-pressed="false">Show</button>
+        </div>
+        <button id="oSignIn" class="primary" type="button" disabled>Sign in</button>
+      </div>
+      <div id="signedIn" class="stack" hidden>
+        <p class="who">Signed in as <b id="oWho"></b></p>
+        <button id="oSignOut" class="ghost" type="button">Sign out</button>
+      </div>
+      <p id="oStatus" class="status" role="status" aria-live="polite"></p>
+      <details id="oDetails" hidden>
+        <summary>What Origin returned</summary>
+        <pre id="oRaw" class="raw"></pre>
+      </details>
+      <p class="tiny left">The password is used once to sign in and is never saved.</p>
+    </section>
+
     <section class="card" aria-labelledby="s1">
       <h2 id="s1"><span class="n">1</span> Organization ID</h2>
       <label for="orgId" class="hint">Paste or type the ID. Pasting a whole message works too - the ID is picked out of it.</label>

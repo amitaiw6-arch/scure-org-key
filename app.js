@@ -32,6 +32,123 @@ function fileNameFor(name) {
   return slug ? 'scure-organization-' + slug + '.csv' : 'scure-organization.csv';
 }
 
+// ---- Origin sign-in (first stage) ----
+//
+// Email + password go to Origin's sign-in service (Firebase, with the public web key of app.origin.io). The organization is
+// looked for in what comes back: the token's claims, the account record, and - if Origin ever allows this address - the
+// GraphQL "me" query. Origin's API does not allow this address yet, so the last step usually cannot run; the screen then
+// says so and keeps the ID field for typing. The password and the tokens are never stored.
+
+const ORIGIN = {
+  key: 'AIzaSyCCojIe0wscxKRbuVqlaFTmxF-UT7SMJRk',
+  auth: 'https://identitytoolkit.googleapis.com/v1/accounts',
+  graphql: 'https://api.origin.io/graphql',
+  meQuery: 'query Me { me { id email organizationId organization { id name } } }',
+};
+
+function decodeJwt(token) {
+  try {
+    const part = String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(part + '='.repeat((4 - part.length % 4) % 4));
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+  } catch (e) {
+    return null;
+  }
+}
+
+/** The organization in any object: a key that mentions "org" holding a UUID (JSON strings inside are opened too). */
+function findOrganization(value, depth) {
+  depth = depth || 0;
+  if (value == null || depth > 6) return null;
+  if (typeof value === 'string') {
+    if (/^\s*[{[]/.test(value)) { try { return findOrganization(JSON.parse(value), depth + 1); } catch (e) { return null; } }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  for (const [k, v] of Object.entries(value)) {
+    if (/org/i.test(k) && typeof v === 'string' && extractOrgId(v) && v.trim().length === 36) {
+      const org = value.organization && typeof value.organization === 'object' ? value.organization : null;
+      return { id: v.trim().toLowerCase(), name: (org && org.name) || (typeof value.organizationName === 'string' ? value.organizationName : '') || '' };
+    }
+  }
+  for (const v of Object.values(value)) {
+    const r = findOrganization(v, depth + 1);
+    if (r) return r;
+  }
+  return null;
+}
+
+function signInError(code) {
+  const c = String(code || '').split(/[ :]/)[0];
+  if (['INVALID_LOGIN_CREDENTIALS', 'INVALID_PASSWORD', 'EMAIL_NOT_FOUND', 'INVALID_EMAIL'].includes(c)) return 'Wrong email or password';
+  if (c === 'USER_DISABLED') return 'This Origin account is disabled';
+  if (c === 'TOO_MANY_ATTEMPTS_TRY_LATER') return 'Too many attempts - wait a few minutes and try again';
+  return 'Sign-in failed' + (c ? ' (' + c + ')' : '') + ' - try again';
+}
+
+/** Never show or keep tokens: this is what the "What Origin returned" box prints. */
+function redact(value) {
+  if (value == null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(redact);
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = /token|secret|password/i.test(k) ? '(hidden)' : redact(v);
+  }
+  return out;
+}
+
+async function postJson(fetchFn, url, body, headers) {
+  const r = await fetchFn(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}), body: JSON.stringify(body) });
+  let json = null;
+  try { json = await r.json(); } catch (e) { /* not JSON */ }
+  return { ok: r.ok, status: r.status, json };
+}
+
+/**
+ * Sign in and look for the organization. Returns
+ * {error} | {email, org: {id, name}|null, where: 'token'|'account'|'api'|null, apiBlocked, returned}.
+ */
+async function originSignIn(email, password, fetchFn) {
+  fetchFn = fetchFn || ((u, o) => fetch(u, o));
+  email = String(email || '').trim();
+  if (!email || !password) return { error: 'Enter your email and password' };
+  let signed;
+  try {
+    signed = await postJson(fetchFn, ORIGIN.auth + ':signInWithPassword?key=' + ORIGIN.key, { email, password, returnSecureToken: true });
+  } catch (e) {
+    return { error: 'No connection to Origin - check the network' };
+  }
+  const idToken = signed.json && signed.json.idToken;
+  if (!signed.ok || !idToken) return { error: signInError(signed.json && signed.json.error && signed.json.error.message) };
+
+  const claims = decodeJwt(idToken);
+  const returned = { token_claims: redact(claims) };
+  let org = findOrganization(claims), where = org ? 'token' : null;
+
+  try {
+    const look = await postJson(fetchFn, ORIGIN.auth + ':lookup?key=' + ORIGIN.key, { idToken });
+    const user = look.json && look.json.users && look.json.users[0];
+    if (user) {
+      returned.account = redact(user);
+      if (!org) { org = findOrganization(user); where = org ? 'account' : null; }
+    }
+  } catch (e) { /* the account record is a bonus */ }
+
+  let apiBlocked = false;
+  if (!org) {
+    try {
+      const api = await postJson(fetchFn, ORIGIN.graphql, { operationName: 'Me', query: ORIGIN.meQuery, variables: {} }, { Authorization: 'Bearer ' + idToken });
+      returned.api = redact(api.json);
+      org = findOrganization(api.json);
+      where = org ? 'api' : null;
+    } catch (e) {
+      apiBlocked = true;   // the browser refused: Origin's API does not allow this address
+      returned.api = 'blocked by the browser (Origin does not allow this app address yet)';
+    }
+  }
+  return { email: (claims && claims.email) || email, org, where, apiBlocked, returned };
+}
+
 // ---- recent list (a convenience only: every read and write is guarded) ----
 
 function loadRecent() {
@@ -211,6 +328,62 @@ function initPage() {
     });
   }
 
+  // ---- Origin sign-in card ----
+  const oEmail = $('oEmail'), oPass = $('oPass'), oSignIn = $('oSignIn'), oStatus = $('oStatus');
+  function oRefresh() { oSignIn.disabled = !(oEmail.value.trim() && oPass.value); }
+  oEmail.addEventListener('input', oRefresh);
+  oPass.addEventListener('input', oRefresh);
+  $('oShow').addEventListener('click', () => {
+    const show = oPass.type === 'password';
+    oPass.type = show ? 'text' : 'password';
+    $('oShow').textContent = show ? 'Hide' : 'Show';
+    $('oShow').setAttribute('aria-pressed', String(show));
+  });
+  function oSignedOut() {
+    $('signedOut').hidden = false;
+    $('signedIn').hidden = true;
+    oPass.value = '';
+    oRefresh();
+  }
+  $('oSignOut').addEventListener('click', () => {
+    oSignedOut();
+    $('oDetails').hidden = true;
+    setStatus(oStatus, '');
+  });
+  oSignIn.addEventListener('click', async () => {
+    oSignIn.disabled = true;
+    oSignIn.textContent = 'Signing in...';
+    setStatus(oStatus, '');
+    let r;
+    try {
+      r = await originSignIn(oEmail.value, oPass.value, window.__fetch);
+    } finally {
+      oSignIn.textContent = 'Sign in';
+    }
+    oPass.value = '';   // the password is not kept
+    if (r.error) {
+      oRefresh();
+      setStatus(oStatus, r.error, 'bad');
+      return;
+    }
+    $('signedOut').hidden = true;
+    $('signedIn').hidden = false;
+    $('oWho').textContent = r.email;
+    $('oRaw').textContent = JSON.stringify(r.returned, null, 2);
+    $('oDetails').hidden = false;
+    if (r.org) {
+      idInput.value = r.org.id;
+      if (r.org.name) nameInput.value = r.org.name;
+      refresh();
+      setStatus(oStatus, 'Organization found' + (r.org.name ? ': ' + r.org.name : '') + '. Now save it to the USB drive.', 'ok');
+    } else {
+      setStatus(oStatus, r.apiBlocked
+        ? 'Signed in, but Origin does not send the organization to this app yet. Type or paste the ID below.'
+        : 'Signed in, but no organization came back. Type or paste the ID below.', 'bad');
+    }
+  });
+  oRefresh();
+
   // install
   let deferred = null;
   window.addEventListener('beforeinstallprompt', e => {
@@ -241,4 +414,4 @@ if (typeof document !== 'undefined' && document.getElementById('orgId')) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv };
+if (typeof module !== 'undefined') module.exports = { extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv, originSignIn, findOrganization, decodeJwt };

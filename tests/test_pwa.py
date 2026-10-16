@@ -70,6 +70,39 @@ navigator.share = async (d) => {
 NOTHING = "delete window.showSaveFilePicker; navigator.canShare = undefined; navigator.share = undefined;"
 
 
+import base64
+
+
+def jwt(claims):
+    enc = lambda o: base64.urlsafe_b64encode(json.dumps(o).encode()).decode().rstrip("=")
+    return enc({"alg": "RS256", "typ": "JWT"}) + "." + enc(claims) + ".sig"
+
+
+# a stand-in for fetch(): window.__route(url, opts) answers; every call is recorded in window.__calls
+MOCK = """
+window.__calls = [];
+window.__json = (o, status) => new Response(JSON.stringify(o), { status: status || 200, headers: { 'Content-Type': 'application/json' } });
+window.__fetch = async (url, opts) => {
+  window.__calls.push({ url, body: opts && opts.body, auth: opts && opts.headers && opts.headers.Authorization });
+  return window.__route(url, opts);
+};
+window.__route = () => { throw new TypeError('Failed to fetch'); };
+"""
+
+
+def route(page, js_body):
+    """Set how the stand-in Origin answers: js_body is the body of function (url, opts)."""
+    page.evaluate("(() => { window.__route = (url, opts) => { %s }; return 0; })()" % js_body)
+
+
+def sign_in(page, email="nurse@clinic.com", password="s3cret!"):
+    page.fill("#oEmail", email)
+    page.fill("#oPass", password)
+    page.click("#oSignIn")
+    page.wait_for_function("document.getElementById('oStatus').textContent !== '' || document.getElementById('signedIn').hidden === false")
+    page.wait_for_function("document.getElementById('oSignIn').textContent === 'Sign in'")
+
+
 def new_page(browser, base, script=None):
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, is_mobile=True, has_touch=True,
                               accept_downloads=True)
@@ -180,6 +213,86 @@ def run(base):
         check("Downloads" in page.inner_text("#saveStatus"), "tells where it went")
         check(page.locator("#saveHelp").evaluate("e => e.open"), "the move-to-drive help opens")
         shot(page, "03-download.png")
+        ctx.close()
+
+        print("sign in to Origin")
+        ctx, page, errors = new_page(browser, base, MOCK)
+        check(page.locator("#oSignIn").is_disabled(), "Sign in is off until email and password are typed")
+        page.fill("#oEmail", "nurse@clinic.com")
+        page.fill("#oPass", "s3cret!")
+        check(page.locator("#oSignIn").is_enabled(), "Sign in turns on")
+        page.click("#oShow")
+        check(page.get_attribute("#oPass", "type") == "text" and page.inner_text("#oShow") == "Hide", "Show reveals the password")
+        page.click("#oShow")
+        check(page.get_attribute("#oPass", "type") == "password", "Hide covers it again")
+
+        # wrong password
+        route(page, "return window.__json({ error: { code: 400, message: 'INVALID_LOGIN_CREDENTIALS' } }, 400);")
+        page.click("#oSignIn")
+        page.wait_for_function("document.getElementById('oStatus').textContent !== ''")
+        check(page.inner_text("#oStatus") == "Wrong email or password", "wrong password message")
+        check(page.input_value("#oPass") == "" and page.locator("#signedOut").is_visible(), "password cleared, still signed out")
+        call = page.evaluate("window.__calls[0]")
+        check("identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" in call["url"], "calls Origin's sign-in service")
+        check(json.loads(call["body"]) == {"email": "nurse@clinic.com", "password": "s3cret!", "returnSecureToken": True}, "sends email and password")
+
+        # the organization is in the token
+        page.evaluate("window.__calls = []")
+        token = jwt({"email": "nurse@clinic.com", "organizationId": ORG.upper(), "organization": {"name": "Acme Dental"}})
+        route(page, "return window.__json({ idToken: '%s', email: 'nurse@clinic.com' });" % token)
+        sign_in(page)
+        check(page.input_value("#orgId") == ORG, "ID taken from the token claims")
+        check(page.input_value("#orgName") == "Acme Dental", "the organization name is taken too")
+        check("Organization found" in page.inner_text("#oStatus"), "found message")
+        check(page.locator("#signedIn").is_visible() and page.inner_text("#oWho") == "nurse@clinic.com", "signed-in view shows the email")
+        check(page.input_value("#oPass") == "", "password not kept")
+        check(page.locator("#saveBtn").is_enabled(), "Save is ready")
+        raw = page.text_content("#oRaw")
+        check("nurse@clinic.com" in raw and "token_claims" in raw, "the box lists what Origin returned")
+        check(token not in raw, "the token itself is not printed")
+        shot(page, "04-signed-in.png")
+        page.click("#oSignOut")
+        check(page.locator("#signedOut").is_visible() and page.locator("#oDetails").is_hidden(), "Sign out returns to the form")
+
+        # the organization is in the account record (customAttributes is a JSON string)
+        page.fill("#orgId", "")
+        page.fill("#orgName", "")
+        route(page, """
+          if (url.includes('signInWithPassword')) return window.__json({ idToken: '%s' });
+          if (url.includes('accounts:lookup')) return window.__json({ users: [{ email: 'nurse@clinic.com', customAttributes: '{"orgId":"%s"}' }] });
+          throw new TypeError('Failed to fetch');""" % (jwt({"email": "nurse@clinic.com"}), ORG))
+        sign_in(page)
+        check(page.input_value("#orgId") == ORG, "ID taken from the account record")
+        page.click("#oSignOut")
+
+        # the organization comes from Origin's API (when it allows this address)
+        page.fill("#orgId", "")
+        route(page, """
+          if (url.includes('signInWithPassword')) return window.__json({ idToken: 'a.b.c' });
+          if (url.includes('accounts:lookup')) return window.__json({ users: [{ email: 'nurse@clinic.com' }] });
+          return window.__json({ data: { me: { organizationId: '%s', organization: { name: 'Acme Dental' } } } });""" % ORG)
+        page.evaluate("window.__calls = []")
+        sign_in(page)
+        check(page.input_value("#orgId") == ORG and page.input_value("#orgName") == "Acme Dental", "ID and name from the API")
+        api = [c for c in page.evaluate("window.__calls") if "api.origin.io" in c["url"]][0]
+        check(api["auth"] == "Bearer a.b.c" and "organizationId" in api["body"], "API asked with the sign-in token")
+        page.click("#oSignOut")
+
+        # Origin's API blocks this address: say so, keep typing possible
+        page.fill("#orgId", "")
+        page.fill("#orgName", "")
+        route(page, """
+          if (url.includes('signInWithPassword')) return window.__json({ idToken: '%s' });
+          if (url.includes('accounts:lookup')) return window.__json({ users: [{ email: 'nurse@clinic.com' }] });
+          throw new TypeError('Failed to fetch');""" % jwt({"email": "nurse@clinic.com", "firebase": {"sign_in_provider": "password"}}))
+        sign_in(page)
+        check("does not send the organization to this app yet" in page.inner_text("#oStatus"), "blocked API is explained")
+        check(page.input_value("#orgId") == "" and page.locator("#saveBtn").is_disabled(), "nothing invented: ID stays empty")
+        check("blocked by the browser" in page.text_content("#oRaw"), "details say the API was refused")
+        page.fill("#orgId", ORG)
+        check(page.locator("#saveBtn").is_enabled(), "typing the ID still works")
+        shot(page, "05-api-blocked.png")
+        check(not errors, "no script errors: %s" % errors)
         ctx.close()
 
         print("offline")
