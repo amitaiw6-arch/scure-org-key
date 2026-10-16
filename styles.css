@@ -99,7 +99,7 @@ button:focus-visible, .file:focus-within, summary:focus-visible { outline: 2px s
 
 .ghost { background: transparent; border-color: var(--card-line); }
 .ghost:active { background: #1b1b20; }
-.file { display: inline-flex; align-items: center; justify-content: center; }
+.file { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
 .row { display: flex; gap: 8px; }
 .row > button, .row > .file { flex: 1; }

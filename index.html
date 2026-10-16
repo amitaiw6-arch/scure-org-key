@@ -27,7 +27,7 @@
 
     <section class="card" aria-labelledby="s0">
       <h2 id="s0">Sign in to Origin</h2>
-      <p class="hint">Sign in with your Origin email to get the organization. Signing in with Google or Microsoft? Type the ID below instead.</p>
+      <p class="hint">Sign in with your Origin email to get the organization. Use Google or Microsoft? Use the card below.</p>
       <div id="signedOut" class="stack">
         <input id="oEmail" type="text" inputmode="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"
                placeholder="Origin email" aria-label="Origin email" class="plain">
@@ -47,6 +47,30 @@
         <pre id="oRaw" class="raw"></pre>
       </details>
       <p class="tiny left">The password is used once to sign in and is never saved.</p>
+    </section>
+
+    <section class="card" aria-labelledby="sg">
+      <h2 id="sg">Sign in with Google or Microsoft</h2>
+      <p class="hint">Origin signs you in with Google or Microsoft only on its own site, so this app uses a one-time bookmark that reads your organization there and brings it back here.</p>
+      <ol class="steps">
+        <li>Tap <b>Copy bookmark code</b>.</li>
+        <li>In your phone's browser, bookmark any page, then edit that bookmark: name it <b>Get Org ID</b> and paste the code as its address.</li>
+        <li>Open <b>app.origin.io</b> and sign in (Google, Microsoft or email).</li>
+        <li>Tap the <b>Get Org ID</b> bookmark. Android Chrome: type <i>Get Org ID</i> in the address bar and pick the bookmark. iPhone Safari: open Bookmarks.</li>
+        <li>You come back here with the ID filled in.</li>
+      </ol>
+      <div class="row">
+        <button id="bmCopy" class="primary" type="button">Copy bookmark code</button>
+      </div>
+      <div class="row">
+        <a id="bmOpen" class="file ghost" href="https://app.origin.io/" target="_blank" rel="noopener">Open app.origin.io</a>
+      </div>
+      <p id="bmStatus" class="status" role="status" aria-live="polite"></p>
+      <details>
+        <summary>What does the bookmark do?</summary>
+        <p class="hint">It runs on the Origin page you are signed in to, in your own browser. It reads the organization from that page, or asks Origin's own server (api.origin.io - the only place your sign-in is ever used) for it, and then returns here with just the organization ID. Nothing is stored or sent anywhere else. The code:</p>
+        <pre id="bmCode" class="raw"></pre>
+      </details>
     </section>
 
     <section class="card" aria-labelledby="s1">
@@ -104,6 +128,7 @@
       <p class="tiny">Nothing leaves your phone. The ID is only written to the file you save.</p>
     </footer>
   </main>
+  <script src="bookmarklet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

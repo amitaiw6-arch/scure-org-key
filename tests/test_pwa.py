@@ -121,6 +121,137 @@ def shot(page, name):
         page.screenshot(path=str(SHOTS / name), full_page=True)
 
 
+def run_bookmark(browser, base):
+    print("Google / Microsoft bookmark")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
+                              permissions=["clipboard-read", "clipboard-write"])
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(base)
+    code = page.text_content("#bmCode")
+    check(code.startswith("javascript:(function scureOriginBookmarklet(pwa)"), "bookmark address is the javascript: function")
+    check("\n" not in code and "#" not in code and "/*" not in code, "one line, no hash sign, no comments")
+    check(code.endswith("(" + json.dumps(base) + ");void 0;"), "called with this app's address")
+    page.click("#bmCopy")
+    page.wait_for_function("document.getElementById('bmStatus').textContent.startsWith('Copied')")
+    check(page.evaluate("navigator.clipboard.readText()") == code, "Copy puts the code on the clipboard")
+    shot(page, "06-google-card.png")
+
+    # back from the bookmark
+    page.goto(base + "#org=" + ORG.upper() + "&name=Acme%20Dental")
+    page.wait_for_selector("#orgId")
+    check(page.input_value("#orgId") == ORG and page.input_value("#orgName") == "Acme Dental", "the app fills ID and name from the address")
+    check("Received from Origin: Acme Dental" in page.inner_text("#idStatus"), "says where it came from")
+    check(page.evaluate("location.hash") == "" and page.locator("#saveBtn").is_enabled(), "address cleaned, Save ready")
+    page.goto(base + "?fresh=1#org=not-an-id")   # a new page load, not just a changed address
+    page.wait_for_selector("#orgId")
+    check(page.input_value("#orgId") == "" and page.evaluate("location.hash") == "", "a bad address is ignored")
+    page.goto(base + "#org=" + ORG)               # the page is open already: a changed address is picked up too
+    page.wait_for_function("document.getElementById('orgId').value !== ''")
+    check(page.input_value("#orgId") == ORG, "an open page picks up a changed address")
+
+    # the bookmark on a stand-in Origin
+    seen = {"api": [], "auth_hosts": set(), "dialogs": []}
+    page.on("dialog", lambda d: (seen["dialogs"].append(d.message), d.accept()))
+
+    def api(route):
+        req = route.request
+        cors = {"access-control-allow-origin": "https://app.origin.io", "access-control-allow-headers": "authorization, content-type",
+                "access-control-allow-methods": "POST, OPTIONS"}
+        if req.method == "OPTIONS":
+            return route.fulfill(status=204, headers=cors)
+        body = json.loads(req.post_data or "{}")
+        seen["api"].append({"auth": req.headers.get("authorization"), "query": body.get("query", "")})
+        mode = state["api"]
+        if mode == "none":
+            data = {"data": {"me": {"id": "u1", "organizationId": None}}}
+        elif mode == "second" and "organization { id name }" in body.get("query", ""):
+            data = {"errors": [{"message": "Cannot query field"}], "data": None}
+        else:
+            data = {"data": {"me": {"id": "u1", "organizationId": ORG, "organization": {"id": ORG, "name": "Acme Dental"}}}}
+        route.fulfill(status=200, headers=dict(cors, **{"content-type": "application/json"}), body=json.dumps(data))
+
+    state = {"api": "ok"}
+    ctx.route("https://api.origin.io/graphql", api)
+    ctx.route("https://app.origin.io/**", lambda r: r.fulfill(status=200, content_type="text/html", body="<!doctype html><title>Origin</title><body>app</body>"))
+
+    def on_request(req):
+        if req.headers.get("authorization"):
+            seen["auth_hosts"].add(req.url.split("/")[2])
+    ctx.on("request", on_request)
+
+    def seed(expires_in_ms=3600000, token="tok-123", signed_in=True, local=None):
+        page.goto("https://app.origin.io/models")
+        page.evaluate("""async ([exp, token, signedIn, local]) => {
+          localStorage.clear(); sessionStorage.clear();
+          if (local) localStorage.setItem(local[0], local[1]);
+          await new Promise((res, rej) => { const del = indexedDB.deleteDatabase('firebaseLocalStorageDb'); del.onsuccess = res; del.onerror = rej; del.onblocked = res; });
+          await new Promise((res, rej) => {
+            const open = indexedDB.open('firebaseLocalStorageDb', 1);
+            open.onupgradeneeded = () => open.result.createObjectStore('firebaseLocalStorage', { keyPath: 'fbase_key' });
+            open.onsuccess = () => {
+              if (!signedIn) return res();
+              const tx = open.result.transaction('firebaseLocalStorage', 'readwrite');
+              tx.objectStore('firebaseLocalStorage').put({ fbase_key: 'firebase:authUser:KEY:[DEFAULT]',
+                value: { uid: 'u', email: 'a@b.com', stsTokenManager: { accessToken: token, refreshToken: 'REFRESH', expirationTime: Date.now() + exp } } });
+              tx.oncomplete = res; tx.onerror = rej;
+            };
+            open.onerror = rej;
+          });
+        }""", [expires_in_ms, token, signed_in, local])
+        seen["api"].clear()
+
+    def tap_bookmark(wait_for_pwa=True):
+        seen["dialogs"].clear()
+        page.evaluate(code[len("javascript:"):])
+        if wait_for_pwa:
+            page.wait_for_url(base + "**")
+            page.wait_for_selector("#orgId")
+        else:
+            page.wait_for_function("true")
+            for _ in range(40):
+                if seen["dialogs"]:
+                    break
+                page.wait_for_timeout(100)
+
+    seed()
+    tap_bookmark()
+    check(page.input_value("#orgId") == ORG and page.input_value("#orgName") == "Acme Dental", "signed-in session: back in the app with ID and name")
+    check(seen["api"][0]["auth"] == "Bearer tok-123", "the API was asked with the page's own token")
+    check(seen["auth_hosts"] == {"api.origin.io"}, "the token went to api.origin.io only: %s" % seen["auth_hosts"])
+    check(page.evaluate("location.hash") == "", "address cleaned")
+
+    state["api"] = "second"
+    seed()
+    tap_bookmark()
+    check(page.input_value("#orgId") == ORG and len(seen["api"]) == 2, "a second, simpler question when the first is refused")
+
+    state["api"] = "ok"
+    seed(local=("currentOrganizationId", ORG))
+    tap_bookmark()
+    check(page.input_value("#orgId") == ORG and seen["api"] == [], "the page's own storage is used first - no API call")
+
+    seed(expires_in_ms=-60000)
+    tap_bookmark(wait_for_pwa=False)
+    check(len(seen["dialogs"]) == 1 and "expired" in seen["dialogs"][0] and seen["api"] == [], "an expired sign-in asks to reload; nothing sent: dialogs=%r api=%r url=%s" % (seen["dialogs"], seen["api"], page.url))
+
+    seed(signed_in=False)
+    tap_bookmark(wait_for_pwa=False)
+    check("not signed in" in seen["dialogs"][0], "not signed in is explained")
+
+    state["api"] = "none"
+    seed()
+    tap_bookmark(wait_for_pwa=False)
+    check("did not return an organization" in seen["dialogs"][0], "an account without an organization is explained")
+
+    page.goto(base)
+    tap_bookmark(wait_for_pwa=False)
+    check("open app.origin.io" in seen["dialogs"][0], "on any other site it says where to use it")
+    check(not errors, "no script errors: %s" % errors)
+    ctx.close()
+
+
 def run(base):
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
@@ -294,6 +425,8 @@ def run(base):
         shot(page, "05-api-blocked.png")
         check(not errors, "no script errors: %s" % errors)
         ctx.close()
+
+        run_bookmark(browser, base)
 
         print("offline")
         ctx, page, errors = new_page(browser, base)

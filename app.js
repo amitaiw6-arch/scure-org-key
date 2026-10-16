@@ -149,6 +149,30 @@ async function originSignIn(email, password, fetchFn) {
   return { email: (claims && claims.email) || email, org, where, apiBlocked, returned };
 }
 
+// ---- the bookmark for Google / Microsoft sign-in ----
+
+/** The javascript: address of the bookmark: the function of bookmarklet.js squeezed onto one line, called with this app's address. */
+function bookmarkletUrl(fn, appUrl) {
+  const body = String(fn)
+    .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+    .replace(/\s+/g, ' ')
+    .trim();
+  return 'javascript:(' + body + ')(' + JSON.stringify(appUrl) + ');void 0;';
+}
+
+/** What the bookmark brings back: #org=<id>&name=<name> - {id, name} or null. */
+function readOrgFromHash(hash) {
+  const m = /[#&]org=([^&]+)/.exec(hash || '');
+  if (!m) return null;
+  let id = null;
+  try { id = extractOrgId(decodeURIComponent(m[1])); } catch (e) { /* bad escape */ }
+  if (!id) return null;
+  let name = '';
+  const n = /[#&]name=([^&]*)/.exec(hash);
+  if (n) { try { name = decodeURIComponent(n[1]); } catch (e) { /* ignore */ } }
+  return { id, name: name.slice(0, 80) };
+}
+
 // ---- recent list (a convenience only: every read and write is guarded) ----
 
 function loadRecent() {
@@ -328,6 +352,38 @@ function initPage() {
     });
   }
 
+  // ---- Google / Microsoft bookmark ----
+  const appUrl = location.origin + location.pathname;
+  const bmCode = typeof scureOriginBookmarklet === 'function' ? bookmarkletUrl(scureOriginBookmarklet, appUrl) : '';
+  $('bmCode').textContent = bmCode;
+  $('bmCopy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(bmCode);
+      setStatus($('bmStatus'), 'Copied. Paste it as the address of a new bookmark.', 'ok');
+    } catch (e) {
+      // no clipboard access: select the code so it can be copied by hand
+      const range = document.createRange();
+      range.selectNodeContents($('bmCode'));
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      $('bmCode').closest('details').open = true;
+      setStatus($('bmStatus'), 'Could not copy automatically - the code is selected below: long-press it and choose Copy.', 'bad');
+    }
+  });
+
+  // back from the bookmark with the organization in the address (also when this page was already open)
+  function applyHash() {
+    const fromOrigin = readOrgFromHash(location.hash);
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    if (!fromOrigin) return;
+    idInput.value = fromOrigin.id;
+    if (fromOrigin.name) nameInput.value = fromOrigin.name;
+    refresh();
+    setStatus(idStatus, 'Received from Origin' + (fromOrigin.name ? ': ' + fromOrigin.name : '') + '. Now save it to the USB drive.', 'ok');
+  }
+  window.addEventListener('hashchange', applyHash);
+
   // ---- Origin sign-in card ----
   const oEmail = $('oEmail'), oPass = $('oPass'), oSignIn = $('oSignIn'), oStatus = $('oStatus');
   function oRefresh() { oSignIn.disabled = !(oEmail.value.trim() && oPass.value); }
@@ -405,6 +461,7 @@ function initPage() {
 
   refresh();
   renderRecent();
+  applyHash();
 }
 
 if (typeof document !== 'undefined' && document.getElementById('orgId')) {
@@ -414,4 +471,4 @@ if (typeof document !== 'undefined' && document.getElementById('orgId')) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv, originSignIn, findOrganization, decodeJwt };
+if (typeof module !== 'undefined') module.exports = { bookmarkletUrl, readOrgFromHash, extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv, originSignIn, findOrganization, decodeJwt };
