@@ -125,6 +125,7 @@ def run_bookmark(browser, base):
     print("Google / Microsoft bookmark")
     ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
                               permissions=["clipboard-read", "clipboard-write"])
+    ctx.add_init_script("Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });")   # desktop: copy instead
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -137,6 +138,21 @@ def run_bookmark(browser, base):
     page.wait_for_function("document.getElementById('bmStatus').textContent.startsWith('Copied')")
     check(page.evaluate("navigator.clipboard.readText()") == code, "Copy puts the code on the clipboard")
     shot(page, "06-google-card.png")
+
+    check(page.get_attribute("#bmDrag", "href") == code, "the draggable link holds the same code")
+    page.click("#bmDrag")
+    check("Drag" in page.inner_text("#bmStatus") and page.url.startswith(base), "tapping the draggable link does not run it here")
+
+    # share a link to another phone
+    check(page.locator("#shareRow").is_hidden(), "no share button without an ID")
+    page.fill("#orgId", ORG)
+    page.fill("#orgName", "Acme Dental")
+    check(page.locator("#shareRow").is_visible(), "share button with a valid ID")
+    page.click("#shareBtn")
+    page.wait_for_function("document.getElementById('shareStatus').textContent.startsWith('Link copied')")
+    link = page.evaluate("navigator.clipboard.readText()")
+    check(link == base + "#org=" + ORG + "&name=Acme%20Dental", "the copied link: " + link)
+    page.goto("about:blank")
 
     # back from the bookmark
     page.goto(base + "#org=" + ORG.upper() + "&name=Acme%20Dental")

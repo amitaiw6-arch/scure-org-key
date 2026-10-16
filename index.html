@@ -66,6 +66,7 @@
         <a id="bmOpen" class="file ghost" href="https://app.origin.io/" target="_blank" rel="noopener">Open app.origin.io</a>
       </div>
       <p id="bmStatus" class="status" role="status" aria-live="polite"></p>
+      <p class="hint">On a computer it is easier: drag this to your bookmarks bar &rarr; <a id="bmDrag" class="drag" href="#" draggable="true">Get Org ID</a></p>
       <details>
         <summary>What does the bookmark do?</summary>
         <p class="hint">It runs on the Origin page you are signed in to, in your own browser. It reads the organization from that page, or asks Origin's own server (api.origin.io - the only place your sign-in is ever used) for it, and then returns here with just the organization ID. Nothing is stored or sent anywhere else. The code:</p>
@@ -84,6 +85,10 @@
         <input id="openFile" type="file" accept=".csv,.txt,.json,text/*" hidden>
       </div>
       <p id="idStatus" class="status" role="status" aria-live="polite"></p>
+      <div class="row" id="shareRow" hidden>
+        <button id="shareBtn" class="ghost" type="button">Send a link to another phone</button>
+      </div>
+      <p id="shareStatus" class="status" role="status" aria-live="polite"></p>
 
       <label for="orgName" class="hint">Organization name <span class="opt">(optional)</span></label>
       <input id="orgName" type="text" autocomplete="organization" placeholder="Acme Dental Lab" maxlength="80">

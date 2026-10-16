@@ -160,6 +160,11 @@ function bookmarkletUrl(fn, appUrl) {
   return 'javascript:(' + body + ')(' + JSON.stringify(appUrl) + ');void 0;';
 }
 
+/** The link that opens this app with the organization already filled in (the same address the bookmark returns to). */
+function shareLink(appUrl, orgId, name) {
+  return appUrl + '#org=' + String(orgId).toLowerCase() + (name ? '&name=' + encodeURIComponent(name) : '');
+}
+
 /** What the bookmark brings back: #org=<id>&name=<name> - {id, name} or null. */
 function readOrgFromHash(hash) {
   const m = /[#&]org=([^&]+)/.exec(hash || '');
@@ -261,6 +266,8 @@ function initPage() {
     else setStatus(idStatus, '');
     fileLabel.textContent = fileNameFor(nameInput.value);
     saveBtn.disabled = !currentId;
+    $('shareRow').hidden = !currentId;
+    setStatus($('shareStatus'), '');
     setStatus(saveStatus, '');
   }
 
@@ -352,10 +359,35 @@ function initPage() {
     });
   }
 
+  $('shareBtn').addEventListener('click', async () => {
+    if (!currentId) return;
+    const url = shareLink(location.origin + location.pathname, currentId, nameInput.value.trim());
+    const st = $('shareStatus');
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'sCure Org Key', text: 'Open this on your phone to save the organization to a USB drive', url });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus(st, 'Link copied. Send it to the other phone - opening it fills in the organization.', 'ok');
+    } catch (e) {
+      setStatus(st, url, 'ok');
+    }
+  });
+
   // ---- Google / Microsoft bookmark ----
   const appUrl = location.origin + location.pathname;
   const bmCode = typeof scureOriginBookmarklet === 'function' ? bookmarkletUrl(scureOriginBookmarklet, appUrl) : '';
   $('bmCode').textContent = bmCode;
+  $('bmDrag').href = bmCode || '#';
+  $('bmDrag').addEventListener('click', e => {
+    e.preventDefault();   // a tap here would run the bookmark on this page; it is meant to be dragged to the bookmarks bar
+    setStatus($('bmStatus'), 'Drag "Get Org ID" to your bookmarks bar - do not tap it here.', 'bad');
+  });
   $('bmCopy').addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(bmCode);
@@ -471,4 +503,4 @@ if (typeof document !== 'undefined' && document.getElementById('orgId')) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { bookmarkletUrl, readOrgFromHash, extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv, originSignIn, findOrganization, decodeJwt };
+if (typeof module !== 'undefined') module.exports = { shareLink, bookmarkletUrl, readOrgFromHash, extractOrgId, buildCsv, fileNameFor, csvCell, saveCsv, originSignIn, findOrganization, decodeJwt };

@@ -60,6 +60,8 @@ body {
   font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto;
 }
 
+.drag { display: inline-block; padding: 4px 12px; border: 1.5px dashed var(--primary-hi); border-radius: 8px; color: var(--primary-hi); text-decoration: none; font-weight: 600; }
+
 .hint { margin: 0; color: var(--muted); font-size: 14px; }
 .opt { opacity: .7; }
 .tiny { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }

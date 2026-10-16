@@ -2,7 +2,7 @@
  * (a phone at the bench). Bump CACHE when any file changes so phones pick up the new version. */
 'use strict';
 
-const CACHE = 'scure-org-key-v3';
+const CACHE = 'scure-org-key-v4';
 const SHELL = [
   './',
   'index.html',
